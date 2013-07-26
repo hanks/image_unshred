@@ -26,13 +26,6 @@ def count_euclidean_distance(src_vec, target_vec):
 
     assert len(src_vec) == len(target_vec)
     
-    """
-    length = len(src_vec)
-    sum = 0
-    for i in range(length):
-       sum += pow(src_vec[i] - target_vec[i], 2)
-    dis = sqrt(sum)
-    """
     dis_sum = sum([pow(item[0] - item[1], 2) for item in zip(src_vec, target_vec)])
     dis = sqrt(dis_sum)
 
@@ -48,6 +41,9 @@ def count_similar_degree(dis):
 
 #####################
 def split_image(img, part_size=(edge_width, height / SPLIT_NUM)):
+    """
+    return img obj list, split image to pieces
+    """
     w, h = img.size
     pw, ph = part_size
 
@@ -84,9 +80,13 @@ def get_pixel_vector(img):
     return a vector of all pixel RGBA info of an image
     """
     data = img.getdata()
+    # just fetch RGB value, and not need alpha value
     return [item for RGBA in data for item in RGBA[:3]]
 
 def cacl_similar(src_img, target_img):
+    """
+    count similar degree with euclidean distance
+    """
     src_vec = [get_pixel_vector(piece) for piece in split_image(src_img)]
     target_vec = [get_pixel_vector(piece) for piece in split_image(target_img)]
 
