@@ -3,8 +3,6 @@
 
 from PIL import Image
 from math import sqrt, pow
-import operator
-import ImageChops
 
 # number of shredded pieces in the original image 
 NUM = 20
@@ -20,14 +18,10 @@ width, height = image.size
 # the whole width of regular 
 shred_width = width / NUM
 
-# number of pieces used to compare similarity 
-SPLIT_NUM = 1
-
 # width of edge piece use to compare
 edge_width = 1
 
 #############################
-## Method 1:
 ## Euclidean Distance Detect
 ############################
 
@@ -53,22 +47,18 @@ def count_similar_degree(dis):
     sim_degree = 1 / (dis + 1)
     return sim_degree
 
-def get_pixel_vector(img):
-    """
-    return a vector of all pixel RGBA info of an image
-    """
-    data = img.getdata()
-    # just fetch RGB value, and not need alpha value
-    return [item for RGBA in data for item in RGBA[:3]]
-
 def cacl_similar(src_img, target_img):
     """
     count similar degree with euclidean distance
     """
-    src_vec = [get_pixel_vector(piece) for piece in split_image(src_img)]
-    target_vec = [get_pixel_vector(piece) for piece in split_image(target_img)]
+    src_pixels = src_img.getdata()
+    target_pixels = target_img.getdata()
 
-    eu_dic = sum([count_euclidean_distance(item[0], item[1]) for item in zip(src_vec, target_vec)]) / SPLIT_NUM
+    eu_dic = 0
+    for i in range(height):
+        eu_dic += count_euclidean_distance(src_pixels[i], target_pixels[i])
+    eu_dic = eu_dic / height
+    
     return count_similar_degree(eu_dic)
 
 def unshred(shred_arr, cacl_similar_func):
@@ -83,95 +73,46 @@ def unshred(shred_arr, cacl_similar_func):
         temp_dict = {}
         temp_dict['img'] = shred_arr[i]
         temp_dict['root'] = i
-        temp_dict['left'] = -1
         temp_dict['right'] = -1
-        temp_dict['max_left_sim_degree'] = -1
+        temp_dict['left'] = -1
         temp_dict['max_right_sim_degree'] = -1
+        temp_dict['max_left_sim_degree'] = -1
 
-        src_left_edge, src_right_edge = get_both_side_edge(temp_dict['img'])
+        src_left_edeg, src_right_edge = get_both_side_edge(temp_dict['img'])
         
         for j in range(num):
-            if i != j:
-                target_left_edge, target_right_edge = get_both_side_edge(shred_arr[j])
-
-                left_sim_degree = cacl_similar_func(src_left_edge, target_right_edge)
-                right_sim_degree = cacl_similar_func(src_right_edge, target_left_edge)
-                
-                if left_sim_degree > temp_dict['max_left_sim_degree'] and j != temp_dict['right']:
-                    temp_dict['max_left_sim_degree'] = left_sim_degree
-                    temp_dict['left'] = j
-
-                if right_sim_degree > temp_dict['max_right_sim_degree'] and j != temp_dict['left']:
-                    temp_dict['max_right_sim_degree'] = right_sim_degree
-                    temp_dict['right'] = j
+            target_left_edge, target_right_edge = get_both_side_edge(shred_arr[j])
+            right_sim_degree = cacl_similar_func(src_right_edge, target_left_edge)
+            left_sim_degree = cacl_similar_func(src_left_edeg, target_right_edge)
+            if right_sim_degree > temp_dict['max_right_sim_degree']:
+                temp_dict['max_right_sim_degree'] = right_sim_degree
+                temp_dict['right'] = j
+            if left_sim_degree > temp_dict['max_left_sim_degree']:
+                temp_dict['max_left_sim_degree'] = left_sim_degree
+                temp_dict['left'] = j                
 
         unshred_arr.append(temp_dict)
 
-    # find the smallest one, and set to it to edge piece
-    unshred_arr.sort(key=lambda x:x['max_left_sim_degree'])
-    unshred_arr[0]['left'] = -1
-    unshred_arr.sort(key=lambda x:x['max_right_sim_degree'])
-    unshred_arr[0]['right'] = -1
+    # find the first pic from left side
+    nexts = [item['right'] for item in  unshred_arr]
 
-    return unshred_arr
-
-
-def unshred_histogram(shred_arr, cacl_similar_func):
-    """
-    do core recovery algorithm
-    """
-
-    unshred_arr = []
-    num = len(shred_arr)
-    
+    first_left = -1
     for i in range(num):
-        temp_dict = {}
-        temp_dict['img'] = shred_arr[i]
-        temp_dict['root'] = i
-        temp_dict['left'] = -1
-        temp_dict['right'] = -1
-        temp_dict['max_left_sim_degree'] = 100
-        temp_dict['max_right_sim_degree'] = 100
+        if i not in nexts:
+            first_left = i
 
-        src_left_edge, src_right_edge = get_both_side_edge(temp_dict['img'])
-        
-        for j in range(num):
-            if i != j:
-                target_left_edge, target_right_edge = get_both_side_edge(shred_arr[j])
+    # build ordered unshred_arr from left side
+    ordered_arr = [unshred_arr[first_left]]
 
-                left_sim_degree = cacl_similar_func(src_left_edge, target_right_edge)
-                right_sim_degree = cacl_similar_func(src_right_edge, target_left_edge)
-                
-                if left_sim_degree < temp_dict['max_left_sim_degree'] and j != temp_dict['right']:
-                    temp_dict['max_left_sim_degree'] = left_sim_degree
-                    temp_dict['left'] = j
+    for _ in range(num - 1):
+       ordered_arr.append(unshred_arr[ordered_arr[-1]['right']]) 
 
-                if right_sim_degree < temp_dict['max_right_sim_degree'] and j != temp_dict['left']:
-                    temp_dict['max_right_sim_degree'] = right_sim_degree
-                    temp_dict['right'] = j
+    return [item['img'] for item in ordered_arr]
 
-        unshred_arr.append(temp_dict)
-
-    # find the biggest one, and set to it to edge piece
-    unshred_arr.sort(key=lambda x:x['max_left_sim_degree'])
-    unshred_arr[-1]['left'] = -1
-    unshred_arr.sort(key=lambda x:x['max_right_sim_degree'])
-    unshred_arr[-1]['right'] = -1
-
-    return unshred_arr
 ######################
 ##
 ## common util method
 ######################
-def split_image(img, part_size=(edge_width, height / SPLIT_NUM)):
-    """
-    return img obj list, split image to pieces
-    """
-    w, h = img.size
-    pw, ph = part_size
-
-    return [img.crop((i, j, i + pw, j + ph)).copy() for i in xrange(0, w, pw) for j in xrange(0, h, ph)]
-
 def create_shred_arr(num, origin_img):
     """
     init shred piece image to array 
@@ -198,34 +139,21 @@ def get_both_side_edge(img):
     right_edge = img.crop(box_edge_right)
     return left_edge, right_edge
 
-def create_new_image(raw_pieces, target, file_name):
-    for i, item in enumerate(raw_pieces):
-        target.paste(item, (shredded_width * i, 0))
-    target.save(file_name)
-
-
-#######################
-## Method 2:
-## Histogram Detect
-#######################
-def calc_histogram_similarity_1(src_img, target_img):
-    h = ImageChops.difference(src_img, target_img).histogram()
-    width, height = float(src_img.size[0]), float(src_img.size[1])
-    return sqrt(reduce(operator.add, map(lambda a, b: a * pow(b, 2), h, range(1024))) / (width * height))
-
-def calc_histogram_similarity_2(src_img, target_img):
-    h1 = src_img.histogram()
-    h2 = target_img.histogram()
-
-    rms = sqrt(reduce(operator.add, map(lambda a,b: (a-b)**2, h1, h2)) / len(h1))
+def create_unshred_img(unshred_img, unshred_arr, file_name):
+    """
+    create unshred image from unshred_arr
+    """
+    for i, img in enumerate(unshred_arr):
+        paste_position = (i * shred_width, 0)
+        unshred_img.paste(img, paste_position)
+        
+    unshred_img.save(file_name)
     
-    return rms
-
 if __name__ == '__main__':
+    image.show()
     shred_arr = create_shred_arr(NUM, image)
     unshred_arr = unshred(shred_arr, cacl_similar)
-#    unshred_arr = unshred_histogram(shred_arr, calc_histogram_similarity_1)
-    print max([item['max_left_sim_degree'] for item in unshred_arr])
-    print max([item['max_right_sim_degree'] for item in unshred_arr])
-    print [(item['left'], item['root'], item['right']) for item in unshred_arr]
-    #print [((item['left'], item['max_left_sim_degree']), item['root'], (item['right'], item['max_right_sim_degree'])) for item in unshred_arr]
+    file_name = "unshredded_img.png"
+    create_unshred_img(unshredded, unshred_arr, file_name)
+    unshredded.show()
+    print "create %s successfully!!" % file_name
