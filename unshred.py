@@ -61,6 +61,17 @@ def cacl_similar(src_img, target_img):
     
     return count_similar_degree(eu_dic)
 
+def cacl_similar_1(src_img, target_img):
+    """
+    count similar degree with euclidean distance
+    """
+    src_vec = [item for pixel in src_img.getdata() for item in pixel]
+    target_vec = [item for pixel in target_img.getdata() for item in pixel]
+
+    eu_dic = count_euclidean_distance(src_vec, target_vec)
+    
+    return count_similar_degree(eu_dic)
+
 def unshred(shred_arr, cacl_similar_func):
     """
     do core recovery algorithm
