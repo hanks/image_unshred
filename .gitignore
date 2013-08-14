@@ -3,6 +3,10 @@
 # C extensions
 *.so
 
+# floobits
+.floo
+FLOOBITS_README.md
+
 # Packages
 *.egg
 *.egg-info
